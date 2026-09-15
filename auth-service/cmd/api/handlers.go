@@ -2,11 +2,15 @@ package main
 
 import (
 	"authentication/data"
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"net/http"
 )
+
+var loggerBaseUrl = "http://logger-service:8082"
 
 func (app *Application) authenticate(w http.ResponseWriter, r *http.Request) {
 	payload := JsonResponse{
@@ -68,6 +72,12 @@ func (app *Application) registerUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = app.logRequest("register", fmt.Sprintf("%s created an account", user.Email))
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+
 	payloadResponse := JsonResponse{
 		Error:   false,
 		Message: "User registered successfully",
@@ -108,6 +118,11 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("User authenticated:", user.Email, "ID:", user.ID)
+	err = app.logRequest("authenticate", fmt.Sprintf("%s logged in", user.Email))
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
 
 	payloadResponse := JsonResponse{
 		Error:   false,
@@ -119,4 +134,27 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 		app.errorJson(w, err, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (app *Application) logRequest(name, data string) error {
+	var entry struct {
+		Name string `json:"name"`
+		Data string `json:"data"`
+	}
+	entry.Data = data
+	entry.Name = name
+
+	jsonData, _ := json.MarshalIndent(entry, "", "\t")
+	url := fmt.Sprintf("%s/%s", loggerBaseUrl, "log")
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return  err
+	}
+	client := &http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return  err
+	}
+	defer res.Body.Close()
+	return nil
 }
