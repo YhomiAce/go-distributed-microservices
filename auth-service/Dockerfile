@@ -1,6 +1,6 @@
 # Build
-FROM golang:1.26-alpine AS builder
-# ENV GOPROXY=https://goproxy.io,https://goproxy.cn,direct
+FROM golang:1.27-alpine AS builder
+ENV GOPROXY=https://goproxy.io,https://goproxy.cn,direct
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download

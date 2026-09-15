@@ -3,6 +3,8 @@ package main
 import (
 	"authentication/data"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 )
 
@@ -32,6 +34,17 @@ func (app *Application) registerUser(w http.ResponseWriter, r *http.Request) {
 	err := app.readJson(w, r, &payload)
 	if err != nil {
 		app.errorJson(w, err, http.StatusBadRequest)
+		return
+	}
+
+	existingUser, err := app.Models.User.GetByEmail(payload.Email)
+	if err != nil {
+		app.errorJson(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	if existingUser != nil {
+		app.errorJson(w, fmt.Errorf("user already exists"), http.StatusBadRequest)
 		return
 	}
 
@@ -86,12 +99,15 @@ func (app *Application) loginUser(w http.ResponseWriter, r *http.Request) {
 		app.errorJson(w, errors.New("invalid credentials"), http.StatusUnauthorized)
 		return
 	}
+	log.Println("User found:", user.Email, "ID:", user.ID)
 
 	validPassword, err := user.PasswordMatches(payload.Password)
+	log.Println("Password match result:", validPassword, "Error:", err)
 	if err != nil || !validPassword {
 		app.errorJson(w, errors.New("invalid credentials"), http.StatusUnauthorized)
 		return
 	}
+	log.Println("User authenticated:", user.Email, "ID:", user.ID)
 
 	payloadResponse := JsonResponse{
 		Error:   false,

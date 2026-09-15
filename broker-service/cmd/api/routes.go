@@ -22,5 +22,7 @@ func (app *Application) routes() *chi.Mux {
 
 	router.Get("/", app.broker)
 
+	router.Post("/handle", app.handleSubmission)
+
 	return router
 }

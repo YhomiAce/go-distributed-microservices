@@ -1,6 +1,42 @@
 package main
 
-import "net/http"
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"time"
+)
+
+var authserviceBaseUrl = "http://auth-service:8081"
+
+type RequestPayload struct {
+	Action string 	`json:"action"`
+	Auth AuthPayload	`json:"auth,omitempty"`
+	Register RegisterPayload	`json:"register,omitempty"`
+}
+
+type AuthPayload struct {
+	Email	string 	`json:"email"`
+	Password	string `json:"password"`
+}
+
+type RegisterPayload struct {
+	Email     string `json:"email"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Password  string `json:"password"`
+}
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:  100,
+		MaxIdleConnsPerHost:  10,
+		IdleConnTimeout: 90 * time.Second,
+	},
+}
 
 func (app *Application) broker(w http.ResponseWriter, r *http.Request) {
 	payload := JsonResponse{
@@ -11,6 +47,101 @@ func (app *Application) broker(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Internal Server Error writing JSON response", http.StatusInternalServerError)
 		// app.errorJson(w, err)
+		return
+	}
+}
+
+func (app *Application) handleSubmission(w http.ResponseWriter, r *http.Request) {
+	var requestPayload RequestPayload
+	err := app.readJson(w, r, &requestPayload)
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+	switch requestPayload.Action {
+		case "register":
+			app.register(w, requestPayload.Register)
+		case "auth":
+			app.authenticate(w, requestPayload.Auth)
+		default: app.errorJson(w, errors.New("Invalid Action"))
+	}
+}
+
+func (app *Application) authenticate(w http.ResponseWriter, payload AuthPayload) {
+	jsonData, _ := json.MarshalIndent(payload, "", "\t")
+	request, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s", authserviceBaseUrl, "login"), bytes.NewBuffer(jsonData))
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+
+	res, err := httpClient.Do(request)
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusUnauthorized {
+		app.errorJson(w, errors.New("Invalid Credentials"))
+		return
+	} else if res.StatusCode != http.StatusOK {
+		app.errorJson(w, errors.New("Error calling auth service"))
+		return
+	}
+
+	var response JsonResponse
+	err = json.NewDecoder(res.Body).Decode(&response)
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+	if response.Error {
+		app.errorJson(w, errors.New(response.Message), http.StatusBadRequest)
+		return
+	}
+
+	var responsePayload JsonResponse
+	responsePayload.Error = false
+	responsePayload.Message = "Success"
+	responsePayload.Data = response.Data
+	err = app.writeJson(w, http.StatusOK, responsePayload)
+	if err != nil {
+		app.errorJson(w, err, http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func (app *Application) register(w http.ResponseWriter, payload RegisterPayload) {
+	jsonData, _ := json.Marshal(payload)
+	 res, err := http.Post(
+		fmt.Sprintf("%s/%s", authserviceBaseUrl, "register"), 
+		"application/json",
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+	defer res.Body.Close()
+
+	var response JsonResponse
+	err = json.NewDecoder(res.Body).Decode(&response)
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+	if response.Error {
+		app.errorJson(w, errors.New(response.Message), http.StatusBadRequest)
+		return
+	}
+	var responsePayload JsonResponse
+	responsePayload.Error = false
+	responsePayload.Message = "Success"
+	responsePayload.Data = response.Data
+	err = app.writeJson(w, http.StatusOK, responsePayload)
+	if err != nil {
+		app.errorJson(w, err, http.StatusInternalServerError)
 		return
 	}
 }
