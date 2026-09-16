@@ -30,6 +30,22 @@ services:
       MONGO_DB: "logs"
     depends_on:
       - mongo
+    
+  mailer-service:
+    build: ./mailer-service
+    ports:
+      - "8083:8083"
+    environment:
+      MAIL_HOST: "mailer"
+      MAIL_DOMAIN: "localhost"
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+      MAIL_PORT: 1025
+      MAIL_FROM_NAME: "John Doe"
+      MAIL_FROM_ADDRESS: "john.doe@example.com"
+      MAIL_ENCRYPTION: none
+    depends_on:
+      - mailer
 
   db:
     image: postgres:18.3-alpine
@@ -53,6 +69,12 @@ services:
       - "27016:27017"
     volumes:
       - mongo_data:/data/db
+
+  mailer:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025" # SMTP server port
+      - "8025:8025" # Web UI port
 
 volumes:
   db_data:
