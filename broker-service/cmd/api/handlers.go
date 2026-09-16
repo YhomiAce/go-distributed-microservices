@@ -1,6 +1,7 @@
 package main
 
 import (
+	"broker/lib/events"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -82,6 +83,8 @@ func (app *Application) handleSubmission(w http.ResponseWriter, r *http.Request)
 			app.authenticate(w, requestPayload.Auth)
 		case "log":
 			app.log(w, requestPayload.Log)
+		case "log-mq":
+			app.logViaRabbitMQ(w, requestPayload.Log)
 		case "mail":
 			app.sendMail(w, requestPayload.Mail)
 		default: app.errorJson(w, errors.New("Invalid Action"))
@@ -225,4 +228,34 @@ func (app *Application) sendMail(w http.ResponseWriter, payload MailPayload) {
 		app.errorJson(w, err, http.StatusInternalServerError)
 		return
 	}
+}
+
+func (app *Application) logViaRabbitMQ(w http.ResponseWriter, payload LogPayload) {
+	err := app.publishRabbitMQEvent(payload.Name, payload.Data)
+	if err != nil {
+		app.errorJson(w, err)
+		return
+	}
+	var response JsonResponse
+	response.Error = false
+	response.Message = "Logged Via RabbitMQ"
+
+	app.writeJson(w, http.StatusAccepted, response)
+}
+
+func (app *Application) publishRabbitMQEvent(name, msg string) error {
+	emitter, err := events.NewEventEmitter(app.RabbitConn)
+	if err != nil {
+		return  err
+	}
+	payload := LogPayload {
+		Name: name,
+		Data: msg,
+	}
+	jsonData, _ := json.Marshal(payload)
+	err = emitter.Push(string(jsonData), "log.INFO")
+	if err != nil {
+		return  err
+	}
+	return nil
 }
