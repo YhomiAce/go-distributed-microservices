@@ -18,6 +18,7 @@ import (
 
 const webPort = "8082"
 const rpcPort = "5002"
+const grpcPort = "50002"
 
 type Application struct {
 	DB *mongo.Client
@@ -41,6 +42,8 @@ func main() {
 
 	err := rpc.Register(rpcServer)
 	go app.rpcListen()
+
+	go app.grpcListen()
 
 	log.Printf("Starting logger-service on port: %s\n", webPort)
 	server := &http.Server {
