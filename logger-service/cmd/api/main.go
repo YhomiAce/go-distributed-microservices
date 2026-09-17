@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"logger/data"
+	"net"
 	"net/http"
+	"net/rpc"
 	"os"
 	"time"
 
@@ -15,6 +17,7 @@ import (
 )
 
 const webPort = "8082"
+const rpcPort = "5002"
 
 type Application struct {
 	DB *mongo.Client
@@ -31,13 +34,21 @@ func main() {
 		DB: db,
 		Models: data.New(db),
 	}
+
+	rpcServer := &RPCServer {
+		DB: db,
+	}
+
+	err := rpc.Register(rpcServer)
+	go app.rpcListen()
+
 	log.Printf("Starting logger-service on port: %s\n", webPort)
 	server := &http.Server {
 		Addr: fmt.Sprintf(":%s", webPort),
 		Handler: app.routes(),
 	}
 
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		log.Fatal("Error starting server: ", err)
 	}
@@ -62,4 +73,22 @@ func connectToDB() *mongo.Client {
 	}
 	log.Fatal("failed to connect to database after 10 attempts")
 	return nil
+}
+
+func (app *Application) rpcListen() error {
+	fmt.Printf("Listening to RPC on port:%s \n",rpcPort)
+	listen, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", rpcPort))
+	if err != nil {
+		return err
+	}
+	defer listen.Close()
+
+	for {
+		rpcConn, err := listen.Accept()
+		if err != nil {
+			log.Println(err.Error())
+			continue
+		}
+		go rpc.ServeConn(rpcConn)
+	}
 }

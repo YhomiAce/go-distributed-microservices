@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/rpc"
 	"time"
 )
 
@@ -79,14 +80,22 @@ func (app *Application) handleSubmission(w http.ResponseWriter, r *http.Request)
 	switch requestPayload.Action {
 		case "register":
 			app.register(w, requestPayload.Register)
+
 		case "auth":
 			app.authenticate(w, requestPayload.Auth)
+
 		case "log":
 			app.log(w, requestPayload.Log)
+
 		case "log-mq":
 			app.logViaRabbitMQ(w, requestPayload.Log)
+
+		case "log-rpc":
+			app.logViaRPC(w, requestPayload.Log)
+
 		case "mail":
 			app.sendMail(w, requestPayload.Mail)
+
 		default: app.errorJson(w, errors.New("Invalid Action"))
 	}
 }
@@ -258,4 +267,34 @@ func (app *Application) publishRabbitMQEvent(name, msg string) error {
 		return  err
 	}
 	return nil
+}
+
+type RPCPayload struct{
+	Name string
+	Data string
+}
+
+func (app *Application) logViaRPC(w http.ResponseWriter, payload LogPayload) {
+	client, err := rpc.Dial("tcp", "logger-service:5002")
+	if err != nil {
+		app.errorJson(w,err)
+		return
+	}
+	rpcPayload := RPCPayload{
+		Name: payload.Name,
+		Data: payload.Data,
+	}
+
+	var result string
+
+	err = client.Call("RPCServer.LogInfo", rpcPayload, &result)
+	if err != nil {
+		app.errorJson(w,err)
+		return
+	}
+	response := JsonResponse {
+		Error: false,
+		Message: result,
+	}
+	app.writeJson(w, http.StatusAccepted, response)
 }
