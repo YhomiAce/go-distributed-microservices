@@ -54,7 +54,7 @@ func connectToRabbitMQ() (*amqp.Connection, error) {
 
 		backoff := time.Duration(i*i) * time.Second
 
-		log.Println("Backing off for %v...", backoff)
+		log.Printf("Backing off for %v...\n", backoff)
 		time.Sleep(backoff)
 	}
 	return  nil, err

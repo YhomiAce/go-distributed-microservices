@@ -60,8 +60,9 @@ func main() {
 func connectToDB() *mongo.Client {
 	uri := os.Getenv("MONGO_URI")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	defer cancel()
 	for range 10 {
-		ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
 		client, err := mongo.Connect(options.Client().ApplyURI(uri))
 		if err != nil {
 			log.Println("Error opening database:", err)
